@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Click Screenshots</title>
+  <link rel="stylesheet" href="../css/popup.css">
+</head>
+<body>
+  <div class="header">
+    <h1>Recent Captures</h1>
+    <button id="toggleCapture" title="Pause/Resume Screenshot Capture">Loading...</button>
+  </div>
+
+  <div id="screenshotsList">
+    <!-- Screenshots will be dynamically inserted here -->
+    <p class="empty-message">No screenshots captured yet, or unable to load.</p>
+  </div>
+
+  <div class="footer">
+    <div id="storageInfo">
+        <p>Storage: <span id="storageUsed">N/A</span> / <span id="storageQuota">N/A</span></p>
+    </div>
+    <button id="createTutorialButton" style="display:none;">Create Tutorial</button>
+    <button id="exportAll">Export All (ZIP)</button>
+    <button id="openOptions">Options</button>
+  </div>
+
+  <template id="screenshotItemTemplate">
+    <div class="screenshot-item">
+      <img src="" alt="Screenshot Thumbnail" class="thumbnail">
+      <div class="info">
+        <p class="title" title="Page Title">Page Title</p>
+        <p class="url" title="Page URL">page.url/path</p>
+        <p class="timestamp">YYYY-MM-DD HH:MM:SS</p>
+        <p class="click-target" title="Clicked Element Selector">Clicked: &lt;selector&gt;</p>
+      </div>
+      <div class="actions">
+         <button class="view-full" title="View Full Screenshot">View</button>
+         <button class="delete-item" title="Delete Screenshot">Delete</button>
+      </div>
+    </div>
+  </template>
+
+  <div id="modal" class="modal">
+    <span class="close-button">&times;</span>
+    <img class="modal-content" id="fullScreenshotImage">
+    <div id="caption"></div>
+  </div>
+
+  <script src="../js/idb-helper.js" type="module"></script> <!-- If direct DB access needed -->
+  <script src="../js/popup.js" type="module"></script>
+</body>
+</html> 

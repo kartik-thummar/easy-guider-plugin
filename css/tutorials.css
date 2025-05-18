@@ -1,0 +1,22 @@
+/* css/tutorials.css */
+#tutorialsListContainer .tutorial-item {
+  border: 1px solid #ddd;
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+#tutorialsListContainer .tutorial-item h3 {
+  margin-top: 0;
+}
+
+#backToPopup {
+    background-color: #6c757d;
+    color: white;
+}
+
+#createNewTutorialFromListPage {
+    background-color: #007bff;
+    color: white;
+} 

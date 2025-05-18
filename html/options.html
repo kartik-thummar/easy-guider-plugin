@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Click Screenshotter Options</title>
+  <link rel="stylesheet" href="../css/options.css">
+</head>
+<body>
+  <h1>Click Screenshotter Options</h1>
+
+  <form id="optionsForm">
+    <fieldset>
+      <legend>General Settings</legend>
+      <div>
+        <label for="captureEnabled">Enable Screenshot Capture:</label>
+        <input type="checkbox" id="captureEnabled" name="captureEnabled">
+      </div>
+      <div>
+        <label for="debounceMs">Debounce Interval (ms):</label>
+        <input type="number" id="debounceMs" name="debounceMs" min="0" step="100">
+        <small>Time to wait between captures for rapid clicks (e.g., 500).</small>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Capture Scope</legend>
+      <div>
+        <input type="radio" id="scopeAll" name="captureScopeType" value="all" checked>
+        <label for="scopeAll">All Pages</label>
+      </div>
+      <div>
+        <input type="radio" id="scopeSpecific" name="captureScopeType" value="specific">
+        <label for="scopeSpecific">Specific Domains</label>
+        <textarea id="specificDomains" name="specificDomains" placeholder="e.g., example.com, *.google.com" rows="3" disabled></textarea>
+        <small>Enter one domain pattern per line.</small>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Image Settings</legend>
+      <div>
+        <label for="screenshotFormat">Screenshot Format:</label>
+        <select id="screenshotFormat" name="screenshotFormat">
+          <option value="png">PNG</option>
+          <option value="jpeg">JPEG</option>
+        </select>
+      </div>
+      <div id="jpegQualitySetting">
+        <label for="jpegQuality">JPEG Quality (1-100):</label>
+        <input type="number" id="jpegQuality" name="jpegQuality" min="1" max="100" step="1">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Storage Management</legend>
+      <div>
+        <label for="storageQuotaMB">Max Storage Quota (MB):</label>
+        <input type="number" id="storageQuotaMB" name="storageQuotaMB" min="10" step="10">
+        <small>Max disk space for screenshots (e.g., 100 MB). Oldest are deleted if exceeded.</small>
+      </div>
+      <div>
+        <label for="retentionDays">Delete Screenshots After (days):</label>
+        <input type="number" id="retentionDays" name="retentionDays" min="1" step="1">
+        <small>Automatically delete screenshots older than this (e.g., 7 days).</small>
+      </div>
+       <div>
+        <label for="clearAllData">Clear All Data:</label>
+        <button type="button" id="clearAllDataButton">Clear All Captured Data</button>
+        <small>Warning: This will delete all stored screenshots immediately.</small>
+      </div>
+    </fieldset>
+
+    <button type="submit" id="saveButton">Save Settings</button>
+    <span id="statusMessage"></span>
+  </form>
+
+  <script src="../js/options.js" type="module"></script>
+</body>
+</html> 
