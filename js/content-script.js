@@ -152,6 +152,20 @@ function handleDocumentClick(event) {
   const target = event.target;
   const isNav = isNavigationElement(target);
 
+  let elementText = '';
+  if (target.childNodes && target.childNodes.length > 0) {
+    for (const node of target.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE && node.nodeValue && node.nodeValue.trim()) {
+            elementText = node.nodeValue.trim();
+            break; // Take the first direct text node found
+        }
+    }
+  }
+  if (!elementText && target.innerText) { // Fallback to innerText if no direct text node found or it's empty
+      elementText = target.innerText.trim();
+  }
+  elementText = elementText.substring(0, 256); // Limit length
+
   const payload = {
     timestamp: new Date().toISOString(),
     pageUrl: window.location.href,
@@ -163,7 +177,8 @@ function handleDocumentClick(event) {
       tagName: target.tagName,
       id: target.id || '',
       classList: Array.from(target.classList),
-      outerHTML: target.outerHTML ? target.outerHTML.substring(0, 1024) : ''
+      outerHTML: target.outerHTML ? target.outerHTML.substring(0, 1024) : '',
+      text: elementText // Use the refined elementText
     }
   };
 
@@ -176,7 +191,7 @@ function handleDocumentClick(event) {
     event.preventDefault();
     // Take screenshot, then proceed with navigation
     if (chrome.runtime && chrome.runtime.id) {
-      chrome.runtime.sendMessage({ type: 'CLICK_DETECTED', payload: payload }, (response) => {
+      chrome.runtime.sendMessage({ type: 'CAPTURE_CLICK', payload: payload }, (response) => {
         if (chrome.runtime.lastError) {
           if (chrome.runtime.lastError.message !== "Extension context invalidated.") {
             console.error('Error sending message:', chrome.runtime.lastError.message);
@@ -197,10 +212,10 @@ function handleDocumentClick(event) {
     // For UI actions, take screenshot after action
     setTimeout(() => {
       if (chrome.runtime && chrome.runtime.id) {
-        chrome.runtime.sendMessage({ type: 'CLICK_DETECTED', payload: payload }, (response) => {
+        chrome.runtime.sendMessage({ type: 'CAPTURE_CLICK', payload: payload }, (response) => {
           if (chrome.runtime.lastError) {
             if (chrome.runtime.lastError.message !== "Extension context invalidated.") {
-              console.error('Error sending message:', chrome.runtime.lastError.message);
+              console.error('Error sending message (after timeout):', chrome.runtime.lastError.message);
             } else {
               console.warn('Message not sent: Extension context invalidated.');
             }

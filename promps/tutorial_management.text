@@ -1,0 +1,43 @@
+done 1. Up/down buttons for future reordering are not working, add loggin, troubleshoot issue, solve problem
+done 2.  entire step title text should be visible, at the moment it truncated.
+done 3. "Add a description..." text should be placeholder, we are missng this textbox's top border as mentioned in the image
+done 4. there should be image editing button inside the imagebox and on the image box. Clicking ion this button should show us image editor as a pop-up with 85% percent screen. use this opensource ui image edior @https://github.com/nhn/tui.image-editor 
+
+done 1. Step Count Initialization: If there are no screenshots yet, the first screenshot taken should initialize the step count to 1. (This seems like it should naturally occur if steps are added sequentially, but let's verify the behavior, especially around tutorial creation and step association).
+done 2. Step Title from Element Text: Instead of the page title, the step title should be derived from the text of the clicked element, formatted as "Click on Element Text". The element text part should be bold by default, but this formatting should be editable (removable).
+3. Headers Concept: Introduce a new "Headers" layer in tutorials. A tutorial can have multiple 
+headers, and each header can contain multiple steps. A "plus" icon at the end of steps 
+should allow adding a new step to the current header or creating a new header. We should 
+be able to up and down headers. (headers reordering). headers have a title, description,
+and steps. Step counts are started from 1 for each header. We should be able to move step 
+from one header to another. we should be able to delete a header.
+
+4. We should be able to dublicate step
+5. add "code block" button to the text editor, so we can write there code blocks. Such as 
+python code, Java code, etc.
+6. add custom html tags to the text editor, so we can write there custom html tags.
+7. add "view" button on "edit tutorial page" so we can view the completed tutorial
+8. add image upload functionality to the text editor
+
+done 1. Header Reordering: Implement "Move Up" / "Move Down" buttons for headers.
+done 2. Step Reordering (within headers): Refine moveStep to work correctly with the new currentHeadersData structure, ensuring steps are reordered only within their parent header.
+done 3. Move Steps Between Headers: Allow dragging or a "move to header" option for steps.
+done 4. Add New Header/Step: Implement the "+" button functionality.
+done 5. Delete Headers: Add functionality to delete a header and its associated steps.
+
+
+done 1. not able to reorder steps
+done 2. step number view design is not proper as mentioned in 1st image
+done 3. make edit tutorial view beautiful and attractive
+
+
+done 9. add cancel edit button on edit tutorial page which should show us view tutorial page
+done 10. there no any button exists for adding new step and new header, we should add this button
+done 11. we should be able to reorder headers. add header button should be on end of the all headers.
+done 12. add new step layout should be similar to the "add header" button
+done 14. i am not able to add new step 
+done 15. is there is no image exists in the step then we should show "import image" button, layout shoud 
+be similar to the "add new step" button"
+16. for the step image, there should be button for "remove image", next to the "Edit image" 
+button, layout should be similar to the "Edit image" button
+17. clicking on "cancel" tutorial editing button is not working

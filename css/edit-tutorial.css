@@ -1,0 +1,502 @@
+/* css/edit-tutorial.css */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f4f7f6;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+header {
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 15px;
+}
+
+.breadcrumb {
+  font-size: 14px;
+  color: #666;
+  margin-top: 10px;
+}
+
+.breadcrumb a {
+  color: #2196F3;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* Tutorial Meta Editor */
+.tutorial-meta-editor {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input[type="text"],
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* Headers Section */
+.tutorial-header-editor-item {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.header-number {
+  font-weight: 600;
+  color: #2196F3;
+  min-width: 100px;
+}
+
+.header-title-input {
+  flex-grow: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.header-move-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.header-move-up,
+.header-move-down {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.header-move-up:hover,
+.header-move-down:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* Steps Section */
+.tutorial-step-editor-item {
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  margin: 15px 0;
+  padding: 20px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.step-number {
+  background: #2196F3;
+  color: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.step-title-input {
+  flex-grow: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.step-move-up,
+.step-move-down {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.step-move-up:hover,
+.step-move-down:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.notes-editor-container {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+/* Screenshot Container */
+.screenshot-container {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.screenshot-image {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.screenshot-placeholder {
+  width: 100%;
+  padding: 40px 20px;
+  background-color: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  text-align: center;
+  color: #6c757d;
+  margin-bottom: 15px;
+}
+
+.import-image-button {
+  width: 200px;
+  padding: 12px 20px;
+  font-size: 14px;
+  background-color: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.import-image-button:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+.import-image-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Edit Image Button */
+.image-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.edit-image-btn,
+.remove-image-btn {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.edit-image-btn:hover,
+.remove-image-btn:hover {
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.remove-image-btn {
+  color: #dc3545;
+}
+
+.remove-image-btn:hover {
+  background: #fff5f5;
+  border-color: #dc3545;
+}
+
+/* Tutorial Actions */
+.tutorial-actions {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tutorial-actions .right-actions {
+  display: flex;
+  gap: 15px;
+}
+
+/* Add Button Styles */
+.add-button-container {
+  margin: 30px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.add-button {
+  width: 200px;
+  padding: 12px 20px;
+  font-size: 14px;
+  background-color: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-button:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+/* Tutorial Header Actions */
+.tutorial-header-actions {
+  margin: 30px 0;
+  display: flex;
+  justify-content: center;
+}
+
+#addNewHeader {
+  width: 200px;
+  padding: 12px 20px;
+  font-size: 14px;
+  background-color: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#addNewHeader:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+/* Button Styles */
+.button {
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.primary-button {
+  background: #2196F3;
+  color: white;
+}
+
+.primary-button:hover {
+  background: #1976D2;
+}
+
+.danger-button {
+  background: #dc3545;
+  color: white;
+}
+
+.danger-button:hover {
+  background: #c82333;
+}
+
+#cancelEditTutorial {
+  background: #6c757d;
+  color: white;
+}
+
+#cancelEditTutorial:hover {
+  background: #5a6268;
+}
+
+/* Image Editor Modal */
+.image-editor-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-editor-modal-content {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 95%;
+  height: 95vh;
+  max-width: 1600px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+#tui-image-editor-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.image-editor-controls {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.image-editor-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  z-index: 1001;
+  background: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Loading States */
+.loading-message {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+/* Empty States */
+.empty-message {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+/* Add Step Button Container */
+.add-step-container {
+  margin: 20px 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 20px;
+}
+
+.add-step-button {
+  width: 200px;
+  padding: 12px 20px;
+  font-size: 14px;
+  background-color: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-step-button:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .step-content {
+    gap: 15px;
+  }
+  
+  .screenshot-container {
+    max-width: 100%;
+  }
+  
+  .step-header {
+    flex-wrap: wrap;
+  }
+} 

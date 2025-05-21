@@ -25,6 +25,12 @@ import {
 
 const OFFSCREEN_DOCUMENT_PATH = 'html/offscreen.html';
 
+async function dataURLtoBlob(dataUrl) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return blob;
+}
+
 // Function to check if an offscreen document is active
 async function hasOffscreenDocument() {
   if (chrome.offscreen && chrome.offscreen.hasDocument) { // Check if the API exists
@@ -204,223 +210,239 @@ async function enforceStorageQuota(newImageSizeInBytes, storageQuotaMB) {
 
 // New function to get thumbnail using chrome.runtime.connect()
 async function getThumbnailFromOffscreen(dataUrl, requestId) {
-  console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Attempting to connect to offscreen document.`);
-  return new Promise(async (resolve, reject) => {
-    if (!await hasOffscreenDocument()) {
-      console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Ensuring offscreen document exists or creating it.`);
-      try {
-        await ensureOffscreenDocument();
-        console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Offscreen document ensured.`);
-      } catch (err) {
-        console.error(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Failed to ensure offscreen document:`, err);
-        return reject(new Error('Failed to create/ensure offscreen document: ' + err.message));
-      }
-    }
+  console.log(`[SW/getThumbnailFromOffscreen] Called for requestId: ${requestId}`);
+  try {
+    await ensureOffscreenDocument(); // Ensure it's still there
+    console.log("[SW/getThumbnailFromOffscreen] Offscreen document ensured. Attempting to connect to port.");
 
-    const port = chrome.runtime.connect({ name: "offscreen-thumbnail-port" });
-    let responseReceived = false;
+    return new Promise((resolve, reject) => {
+      const port = chrome.runtime.connect({ name: 'offscreen-thumbnail-port' });
+      let communicationTimeout;
 
-    port.onMessage.addListener((response) => {
-      console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Message received from port:`, response);
-      if (response.originalRequestId === requestId) {
-        responseReceived = true;
-        port.disconnect();
-        if (response.success) {
-          resolve(response);
-        } else {
-          console.error(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Thumbnail generation failed in offscreen:`, response.error);
-          // Resolve with the error response structure, so the caller can see the error string
-          resolve(response); 
+      const onPortMessage = (message) => {
+        // console.log(`[SW/getThumbnailFromOffscreen] Message received on port for ${requestId}:`, message);
+        if (message.originalRequestId === requestId) {
+          clearTimeout(communicationTimeout);
+          port.onMessage.removeListener(onPortMessage);
+          port.disconnect(); // Clean up the port
+
+          if (message.success) {
+            console.log(`[SW/getThumbnailFromOffscreen] Thumbnail gen SUCCEEDED via port for ${requestId}`);
+            resolve(message.thumbnailDataUrl);
+          } else {
+            console.error(`[SW/getThumbnailFromOffscreen] Thumbnail gen FAILED via port for ${requestId}:`, message.error);
+            reject(new Error(message.error || 'Unknown error from offscreen document'));
+          }
         }
-      }
-    });
+      };
 
-    port.onDisconnect.addListener(() => {
-      console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Port disconnected.`);
-      if (!responseReceived) {
-        const errorMessage = chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Port disconnected before response.';
-        console.error(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Error or disconnect without response:`, errorMessage);
-        reject(new Error('Failed to get thumbnail: ' + errorMessage));
-      }
-      // Cleanup is handled by the promise resolving or rejecting
-    });
+      port.onMessage.addListener(onPortMessage);
 
-    console.log(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Posting GENERATE_THUMBNAIL message to port.`);
-    port.postMessage({
-      type: 'GENERATE_THUMBNAIL',
-      dataUrl: dataUrl,
-      requestId: requestId // Include a unique ID for this request
-    });
-
-    // Timeout for the operation
-    setTimeout(() => {
-      if (!responseReceived) {
-        console.error(`[SW] getThumbnailFromOffscreen (ID: ${requestId}): Operation timed out.`);
+      port.onDisconnect.addListener(() => {
+        console.log(`[SW/getThumbnailFromOffscreen] Port disconnected for ${requestId}.`);
+        clearTimeout(communicationTimeout);
+        // If the promise hasn't been resolved or rejected yet, it means an unexpected disconnect.
+        // It might have been resolved/rejected by onPortMessage already if disconnect is graceful.
+        // To avoid issues with `reject` being called multiple times, check promise state or use a flag.
+        // For now, we assume onPortMessage handles success/failure before a typical disconnect.
+        // If it's an abrupt disconnect (e.g., offscreen crashed), the timeout should catch it.
+      });
+      
+      // Set a timeout for the entire communication sequence
+      communicationTimeout = setTimeout(() => {
+        console.error(`[SW/getThumbnailFromOffscreen] TIMEOUT for requestId: ${requestId} (port communication)`);
+        port.onMessage.removeListener(onPortMessage);
         port.disconnect();
-        reject(new Error('Thumbnail generation timed out'));
+        reject(new Error(`Timeout waiting for thumbnail response via port for requestId: ${requestId}`));
+      }, 15000); // Increased timeout to 15 seconds for port comms
+
+      console.log(`[SW/getThumbnailFromOffscreen] Port connected. Sending GENERATE_THUMBNAIL to offscreen for ${requestId}`);
+      try {
+        port.postMessage({
+          type: 'GENERATE_THUMBNAIL',
+          dataUrl: dataUrl,
+          requestId: requestId,
+          // Optional: specify thumbnail parameters if needed, or let offscreen use defaults
+          // thumbnailWidth: 200, 
+          // thumbnailFormat: 'image/jpeg',
+          // thumbnailQuality: 0.7
+        });
+      } catch (error) {
+        clearTimeout(communicationTimeout);
+        port.onMessage.removeListener(onPortMessage);
+        port.disconnect();
+        console.error('[SW/getThumbnailFromOffscreen] Error POSTING message to offscreen port:', error);
+        reject(error);
       }
-    }, 10000); // 10-second timeout
-  });
+    });
+  } catch (error) {
+    console.error("[SW/getThumbnailFromOffscreen] Overall error for requestId:", requestId, error);
+    throw error; // Re-throw to be caught by caller
+  }
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Message received in service worker:', message, 'from sender:', sender);
+// Debounce map
+const debouncedCaptures = new Map();
 
-  if (message.type === 'CLICK_DETECTED') {
-    console.log('Click detected, processing screenshot for:', message.payload.pageUrl);
+async function handleCaptureAndStore(tab, clickData) {
+  console.log("[SW/handleCaptureAndStore] CALLED. Tab ID:", tab.id, "Tab URL:", tab.url, "ClickData:", clickData);
 
-    if (!sender.tab || !sender.tab.id) {
-      console.error('Sender tab ID is missing. Cannot capture screenshot.');
-      sendResponse({ success: false, error: 'Missing tab ID' });
-      return false;
-    }
-    const tabId = sender.tab.id;
-    const windowId = sender.tab.windowId;
+  const { debounceMs } = await chrome.storage.local.get('debounceMs');
+  const effectiveDebounceMs = debounceMs || 500;
+  console.log("[SW/handleCaptureAndStore] Effective debounceMs:", effectiveDebounceMs);
 
-    chrome.storage.local.get(['screenshotFormat', 'jpegQuality', 'captureEnabled'], async (settings) => {
-      if (chrome.runtime.lastError) {
-        console.error('Error getting settings for capture:', chrome.runtime.lastError);
-        sendResponse({ success: false, error: 'Failed to get settings' });
-        return;
-      }
+  if (debouncedCaptures.has(tab.id)) {
+    console.log(`[SW/handleCaptureAndStore] Debouncing capture for tabId: ${tab.id}. Clearing existing timeout.`);
+    clearTimeout(debouncedCaptures.get(tab.id));
+  }
 
-      if (!settings.captureEnabled) {
-        console.log('Capture is disabled in settings. Skipping screenshot.');
-        sendResponse({ success: false, error: 'Capture disabled' });
-        return;
-      }
+  debouncedCaptures.set(tab.id, setTimeout(async () => {
+    debouncedCaptures.delete(tab.id);
+    console.log(`[SW/handleCaptureAndStore] Debounce ended for tabId: ${tab.id}. Proceeding with capture.`);
 
-      let targetTabInfo = null;
-      try {
-        targetTabInfo = await chrome.tabs.get(tabId);
-        if (!targetTabInfo || targetTabInfo.windowId !== windowId) {
-          console.warn(`Tab ID ${tabId} in window ${windowId} no longer exists or has changed window. Current info: ${JSON.stringify(targetTabInfo)}. Skipping capture.`);
-          sendResponse({ success: false, error: 'Tab not found or changed window' });
-          return;
-        }
-        // Add checks for tab status and activity
-        if (targetTabInfo.status !== 'complete') {
-          console.warn(`Tab ID ${tabId} is not fully loaded (status: ${targetTabInfo.status}). Skipping capture.`);
-          sendResponse({ success: false, error: `Tab not complete (status: ${targetTabInfo.status})` });
-          return;
-        }
-        // For captureVisibleTab, the tab doesn't strictly need to be active in its window, 
-        // but if it's not, the user might be surprised.
-        // However, the primary cause of "cannot access contents" isn't usually active state if windowId is correct.
-        // We'll log if not active but proceed.
-        if (!targetTabInfo.active) {
-          console.log(`Tab ID ${tabId} is not the active tab in its window. Proceeding with capture anyway.`);
-        }
+    try {
+      console.log("[SW/handleCaptureAndStore] Getting screenshot settings (format, quality, quota)...");
+      const { screenshotFormat, jpegQuality, storageQuotaMB } = await chrome.storage.local.get([
+        'screenshotFormat',
+        'jpegQuality',
+        'storageQuotaMB'
+      ]);
+      console.log("[SW/handleCaptureAndStore] Settings retrieved: format:", screenshotFormat, "jpegQuality:", jpegQuality, "storageQuotaMB:", storageQuotaMB);
 
-        console.log(`Confirmed tab ${tabId} (status: ${targetTabInfo.status}, active: ${targetTabInfo.active}) exists in window ${targetTabInfo.windowId}. Proceeding with capture.`);
-      } catch (error) {
-        console.warn(`Error checking tab ${tabId} (expected in window ${windowId}): ${error.message}. Skipping capture.`);
-        sendResponse({ success: false, error: `Tab ${tabId} not accessible: ${error.message}` });
-        return;
-      }
-
-      const captureOptions = {
-        format: settings.screenshotFormat === 'jpeg' ? 'jpeg' : 'png',
-      };
-      if (captureOptions.format === 'jpeg') {
-        captureOptions.quality = settings.jpegQuality || 90;
-      }
+      const format = screenshotFormat || 'png';
+      const quality = format === 'jpeg' ? (jpegQuality || 90) : undefined;
+      console.log(`[SW/handleCaptureAndStore] Using format: ${format}, quality: ${quality}`);
       
-      // Use the confirmed windowId from the tab we just fetched.
-      // The first argument to captureVisibleTab is windowId (optional). 
-      // If we pass null, it uses the current window. If we pass the specific windowId, it targets that.
-      console.log(`Attempting to capture tab in windowId: ${targetTabInfo.windowId} with options: ${JSON.stringify(captureOptions)}`);
-      chrome.tabs.captureVisibleTab(targetTabInfo.windowId, captureOptions, async (dataUrl) => {
+      console.log(`[SW/handleCaptureAndStore] Attempting chrome.tabs.captureVisibleTab for tabId: ${tab.id}`);
+      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format, quality });
+      
+      if (!dataUrl) {
+        console.error("[SW/handleCaptureAndStore] captureVisibleTab returned EMPTY dataUrl for tabId:", tab.id);
+        throw new Error('Capture failed, no data returned from captureVisibleTab.');
+      }
+      console.log(`[SW/handleCaptureAndStore] captureVisibleTab SUCCEEDED for tabId: ${tab.id}. Data URL length: ${dataUrl.length}`);
+      
+      const imageBlob = await dataURLtoBlob(dataUrl);
+      const imageSizeBytes = imageBlob.size;
+      const imageType = imageBlob.type;
+
+      console.log(`[SW/handleCaptureAndStore] Converted to Blob. Size: ${imageSizeBytes} bytes, Type: ${imageType}. Checking storage quota...`);
+      if (!await enforceStorageQuota(imageSizeBytes, storageQuotaMB || defaultSettings.storageQuotaMB)) {
+        console.warn("[SW/handleCaptureAndStore] Not enough storage after attempting cleanup. Screenshot NOT SAVED for tabId:", tab.id);
+        chrome.action.setBadgeText({ text: 'FULL' });
+        chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+        setTimeout(() => chrome.action.setBadgeText({ text: '' }), 5000);
+        return; 
+      }
+      console.log("[SW/handleCaptureAndStore] Storage quota check PASSED.");
+
+      console.log("[SW/handleCaptureAndStore] Generating thumbnail for tabId:", tab.id);
+      const thumbnailRequestId = `thumb-${tab.id}-${Date.now()}`;
+      let thumbnailDataUrl = null;
+      try {
+        thumbnailDataUrl = await getThumbnailFromOffscreen(dataUrl, thumbnailRequestId);
+        console.log("[SW/handleCaptureAndStore] Thumbnail received for tabId:", tab.id, "Length:", thumbnailDataUrl ? thumbnailDataUrl.length : 'N/A');
+      } catch (thumbError) {
+        console.error("[SW/handleCaptureAndStore] Thumbnail generation FAILED for tabId:", tab.id, "Error:", thumbError.message);
+        // Continue to save without a thumbnail
+      }
+
+      // Get current step counter, increment, and save
+      let { stepCounter } = await chrome.storage.local.get({ stepCounter: 0 });
+      stepCounter++;
+      await chrome.storage.local.set({ stepCounter });
+      const pageTitleWithStep = `Step ${stepCounter}: ${tab.title}`;
+      console.log(`[SW/handleCaptureAndStore] Updated page title with step: "${pageTitleWithStep}"`);
+
+      const record = {
+        timestamp: new Date().toISOString(),
+        pageUrl: tab.url,
+        pageTitle: pageTitleWithStep, // Use updated title
+        imageData: imageBlob, // Store the Blob itself
+        imageType: imageType, // Store the Blob's type
+        thumbnailDataUrl: thumbnailDataUrl,
+        imageSizeBytes: imageSizeBytes,
+        targetElementInfo: clickData?.targetElementInfo,
+        clickCoordinates: clickData?.clickCoordinates,
+        viewportDimensions: clickData?.viewportDimensions
+      };
+      console.log("[SW/handleCaptureAndStore] Screenshot record prepared:", record);
+
+      console.log("[SW/handleCaptureAndStore] Calling idbHelper.addScreenshot for tabId:", tab.id);
+      const recordId = await addScreenshot(record);
+      console.log("[SW/handleCaptureAndStore] Screenshot record SAVED to DB with ID:", recordId, "for tabId:", tab.id);
+
+      chrome.runtime.sendMessage({ type: 'SCREENSHOT_TAKEN', screenshotId: recordId });
+      console.log("[SW/handleCaptureAndStore] Sent SCREENSHOT_TAKEN message for ID:", recordId);
+
+    } catch (error) {
+      console.error("[SW/handleCaptureAndStore] CRITICAL Error during capture and store for tabId:", tab.id, error, error.stack);
+      chrome.action.setBadgeText({ text: 'ERR' });
+      chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+      setTimeout(() => chrome.action.setBadgeText({ text: '' }), 5000);
+    }
+  }, effectiveDebounceMs));
+}
+
+// Main message listener
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("[SW/onMessage] Received message: ", message, "From sender tab ID:", sender.tab ? sender.tab.id : 'N/A', "From extension ID:", sender.id, "Expected ext ID:", chrome.runtime.id);
+
+  // Allow messages from the offscreen document or other parts of the extension itself
+  if (sender.id !== chrome.runtime.id && message.target !== 'offscreen') { // Adjusted condition
+      if (!message.type?.startsWith('CAPTURE_') && !message.type?.startsWith('THUMBNAIL_')) { // Be more specific about allowed external messages if any
+         console.warn("[SW/onMessage] Ignoring message from unexpected sender or unknown type:", sender, message);
+         // sendResponse({success: false, error: "Invalid sender or message type"});
+         // return false; // Or true if you might respond later
+      }
+  }
+
+  if (message.type === 'CAPTURE_CLICK') {
+    console.log("[SW/onMessage] CAPTURE_CLICK message received. Sender tab:", sender.tab);
+    if (!sender.tab) {
+      console.error("[SW/onMessage] CAPTURE_CLICK received without sender.tab. Cannot process.");
+      sendResponse({ success: false, error: "No sender tab info for CAPTURE_CLICK" });
+      return true; 
+    }
+    console.log("[SW/onMessage] Checking captureEnabled setting before proceeding with CAPTURE_CLICK...");
+    chrome.storage.local.get('captureEnabled', async (settings) => {
         if (chrome.runtime.lastError) {
-          console.error(`Error capturing visible tab (tried windowId: ${targetTabInfo.windowId}, tabId: ${tabId}):`, chrome.runtime.lastError.message);
-          sendResponse({ success: false, error: `Capture Error: ${chrome.runtime.lastError.message}` });
-          return;
+            console.error("[SW/onMessage] Error getting captureEnabled setting for CAPTURE_CLICK:", chrome.runtime.lastError.message);
+            sendResponse({success: false, error: "Failed to get capture settings"});
+            return;
         }
-        if (dataUrl) {
-          console.log('Screenshot captured successfully for tabId:', tabId);
-          
-          try {
-            await ensureOffscreenDocument();
-            const imageBlob = await fetch(dataUrl).then(res => res.blob());
-            const currentSettings = await chrome.storage.local.get(['storageQuotaMB']); // Re-fetch for accuracy
-            const storageQuotaMB = currentSettings.storageQuotaMB || 100;
-            const canSave = await enforceStorageQuota(imageBlob.size, storageQuotaMB);
-
-            if (!canSave) {
-              console.warn('Screenshot not saved due to storage quota limitations for tabId:', tabId);
-              sendResponse({ success: false, error: 'Storage quota exceeded, screenshot not saved.' });
-              return;
-            }
-
-            let thumbnailDataUrl = '';
-            const thumbnailRequestId = `thumb-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-            try {
-              console.log(`[SW] Requesting thumbnail generation (ID: ${thumbnailRequestId}) for tabId:`, tabId, 'dataUrl length:', dataUrl.length);
-              
-              // Use the new connect-based function
-              const thumbnailResponse = await getThumbnailFromOffscreen(dataUrl, thumbnailRequestId);
-              
-              console.log(`[SW] Thumbnail response (ID: ${thumbnailRequestId}) for tabId:`, tabId, 'Response:', thumbnailResponse);
-              if (thumbnailResponse && thumbnailResponse.success) {
-                thumbnailDataUrl = thumbnailResponse.thumbnailDataUrl;
-                console.log(`[SW] Thumbnail generated successfully (ID: ${thumbnailRequestId}) for tabId:`, tabId);
-                if (thumbnailDataUrl && !thumbnailDataUrl.startsWith('data:image/')) {
-                  console.error(`[SW] Invalid thumbnail data URL format (ID: ${thumbnailRequestId}):`, thumbnailDataUrl.substring(0, 30) + '...');
-                }
-              } else {
-                console.error(`[SW] Thumbnail generation failed (ID: ${thumbnailRequestId}) for tabId:`, tabId, 'Error:', thumbnailResponse && thumbnailResponse.error);
-              }
-            } catch (e) {
-              console.error(`[SW] Error getting thumbnail from offscreen (ID: ${thumbnailRequestId}) for tabId:`, tabId, ':', e);
-            }
-
-            // Get and increment step counter
-            let stepCounter = 1;
-            try {
-              const { stepCounter: storedStep } = await chrome.storage.local.get('stepCounter');
-              stepCounter = (storedStep || 0) + 1;
-              await chrome.storage.local.set({ stepCounter });
-            } catch (e) {
-              console.warn('Could not update step counter:', e);
-            }
-
-            // Prepend step number to pageTitle
-            let pageTitleWithStep = message.payload.pageTitle || '';
-            pageTitleWithStep = `Step ${stepCounter}: ${pageTitleWithStep}`;
-
-            console.log(`[SW] About to save screenshot record. Thumbnail URL is: "${thumbnailDataUrl ? thumbnailDataUrl.substring(0, 50) + '...' : 'EMPTY'}"`); // Log thumbnail URL state
-            const screenshotRecord = {
-              ...message.payload,
-              pageTitle: pageTitleWithStep,
-              imageData: imageBlob,
-              thumbnailDataUrl: thumbnailDataUrl, // Ensure this is correctly populated
-              imageSizeBytes: imageBlob.size,
-              tabId: tabId, // ensure tabId is from the original message sender
-              windowId: targetTabInfo.windowId // use the confirmed windowId
-            };
-
-            // Log the actual record before saving
-            console.log('[SW] Screenshot record to be saved:', JSON.parse(JSON.stringify(screenshotRecord, (key, value) => key === 'imageData' ? '[BlobData]' : value)));
-
-            const recordId = await addScreenshot(screenshotRecord);
-            console.log('Screenshot record saved to IDB for tabId:', tabId, 'ID:', recordId);
-            chrome.runtime.sendMessage({ type: 'STORAGE_UPDATED' }).catch(e => console.debug("Error sending STORAGE_UPDATED after save, popup likely closed:", e));
-            sendResponse({ success: true, dataUrlLength: dataUrl.length, recordId: recordId, thumbnailUrlLength: thumbnailDataUrl.length });
-
-          } catch (error) {
-            console.error('Error processing/saving screenshot for tabId:', tabId, error);
-            sendResponse({ success: false, error: 'Processing/saving error: ' + error.message });
-          }
+        console.log("[SW/onMessage] captureEnabled setting for CAPTURE_CLICK is:", settings.captureEnabled);
+        if (settings.captureEnabled) {
+            console.log("[SW/onMessage] Capture is ENABLED. Calling handleCaptureAndStore. Message payload:", message.payload);
+            // No need to await handleCaptureAndStore itself as it contains a setTimeout
+            handleCaptureAndStore(sender.tab, message.payload); 
+            sendResponse({ success: true, message: "Capture initiated" });
         } else {
-          console.error('captureVisibleTab returned undefined/empty dataUrl for tabId:', tabId);
-          sendResponse({ success: false, error: 'Capture failed, no data URL returned' });
+            console.log("[SW/onMessage] Capture is NOT enabled. Ignoring CAPTURE_CLICK.");
+            sendResponse({ success: false, message: "Capture not enabled" });
         }
-      });
     });
+    return true; // Indicate async response because of chrome.storage.local.get
+  }
+  
+  // Listener for messages from the offscreen document (thumbnail results)
+  if (message.type === 'THUMBNAIL_GENERATED' && message.target === 'service-worker') {
+    // This is now handled by the specific listener in getThumbnailFromOffscreen for clarity and request matching.
+    // The global listener in getThumbnailFromOffscreen will pick this up.
+    // console.log("[SW/onMessage] Received THUMBNAIL_GENERATED from offscreen (will be handled by getThumbnailFromOffscreen specific listener):", message.requestId);
+    // No sendResponse needed here as it's a response to a promise within getThumbnailFromOffscreen
+    return false;
+  }
 
-    console.log('Service Worker: CLICK_DETECTED handler is about to return true, indicating async sendResponse.');
-    return true; // Indicates that sendResponse will be called asynchronously
-  } else if (message.type === 'DIAGNOSE_THUMBNAIL') {
+  // Listener for requests from the offscreen document to the service worker (if any were needed)
+  // Example: if offscreen needed to ask SW for something.
+  // if (message.type === 'REQUEST_FROM_OFFSCREEN' && sender.url && sender.url.endsWith(OFFSCREEN_DOCUMENT_PATH)) {
+  //   console.log("Message from offscreen document:", message.data);
+  //   sendResponse({ success: true, reply: "SW got your request from offscreen!" });
+  //   return true;
+  // }
+
+  if (message.type === 'DIAGNOSE_THUMBNAIL') {
     // Diagnostic endpoint for testing thumbnail generation directly
     console.log('[DIAGNOSTIC] Testing thumbnail generation');
     ensureOffscreenDocument().then(async () => {

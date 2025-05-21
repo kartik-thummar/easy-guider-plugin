@@ -1,4 +1,5 @@
-import { initDB, addScreenshot } from './idb-helper.js'; // Assuming idb-helper.js exports these, or adjust as needed
+import { initDB, addScreenshot, getUnassignedScreenshots } from './idb-helper.js'; // Assuming idb-helper.js exports these, or adjust as needed
+import * as idbHelper from './idb-helper.js';
 
 const toggleCaptureButton = document.getElementById('toggleCapture');
 const openOptionsButton = document.getElementById('openOptions');
@@ -16,6 +17,7 @@ const storageUsedSpan = document.getElementById('storageUsed');
 const storageQuotaSpan = document.getElementById('storageQuota');
 
 const createTutorialButton = document.getElementById('createTutorialButton');
+const homeButton = document.getElementById('homeButton');
 
 // Initialize diagnostic button
 // const diagnoseButton = document.getElementById('diagnoseButton'); // REMOVE or COMMENT OUT
@@ -36,70 +38,33 @@ function truncateText(text, maxLength = 50) {
 let db;
 async function getDb() {
   if (db) return db;
-  db = await initDB(); // Ensure initDB is available and works standalone
+  db = await idbHelper.initDB();
   return db;
 }
 
-async function getRecentScreenshots(limit = 10) {
-  const currentDb = await getDb();
-  return new Promise((resolve, reject) => {
-    if (!currentDb) {
-        reject("Database not available");
-        return;
-    }
-    const transaction = currentDb.transaction(['screenshots'], 'readonly');
-    const store = transaction.objectStore('screenshots');
-    const index = store.index('timestamp'); // Assuming 'timestamp' index exists
-    const request = index.getAll(null, limit); // Gets all, then we slice. Better: use cursor with IDBKeyRange and sort direction.
-    // Or, if using auto-incrementing ID as primary key and wanting latest by ID:
-    // const request = store.openCursor(null, 'prev');
-    // For now, getAll and sort/slice is simpler for small N
-
-    request.onsuccess = () => {
-      // Sort by timestamp descending to get the most recent
-      const sortedResults = request.result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      resolve(sortedResults.slice(0, limit));
-    };
-    request.onerror = (event) => {
-      console.error('Error fetching recent screenshots:', event.target.error);
-      reject(event.target.error);
-    };
-  });
-}
-
 async function deleteScreenshot(id) {
-    const currentDb = await getDb();
-    return new Promise((resolve, reject) => {
-        const transaction = currentDb.transaction(['screenshots'], 'readwrite');
-        const store = transaction.objectStore('screenshots');
-        const request = store.delete(id);
-        request.onsuccess = () => resolve();
-        request.onerror = (event) => reject(event.target.error);
-    });
+    try {
+        await idbHelper.deleteScreenshot(id);
+        await idbHelper.deleteTutorialStepsByScreenshotId(id);
+        console.log(`[Popup] Deleted screenshot ${id} and associated tutorial steps.`);
+        displayScreenshots();
+        updatePopupState();
+        chrome.runtime.sendMessage({ type: "STORAGE_UPDATED" });
+    } catch (error) {
+        console.error("Error deleting screenshot or its tutorial steps:", error);
+        alert("Error deleting screenshot. Check console.");
+    }
 }
 
 async function getScreenshotBlob(id) {
-    const currentDb = await getDb();
-    return new Promise((resolve, reject) => {
-        const transaction = currentDb.transaction(['screenshots'], 'readonly');
-        const store = transaction.objectStore('screenshots');
-        const request = store.get(id);
-        request.onsuccess = () => {
-            if (request.result && request.result.imageData instanceof Blob) {
-                resolve(request.result.imageData);
-            } else {
-                reject('Image data not found or not a Blob.');
-            }
-        };
-        request.onerror = (event) => reject(event.target.error);
-    });
+    return idbHelper.getScreenshotBlob(id);
 }
 
 
 // --- UI Rendering ---
 async function displayScreenshots() {
   try {
-    const screenshots = await getRecentScreenshots(10);
+    const screenshots = await idbHelper.getRecentScreenshots(10);
     screenshotsListDiv.innerHTML = ''; // Clear existing
 
     if (screenshots && screenshots.length > 0) {
@@ -165,12 +130,21 @@ function renderScreenshotItem(item) {
   viewButton.addEventListener('click', async () => {
     try {
       const blob = await getScreenshotBlob(item.id);
-      modalImage.src = URL.createObjectURL(blob);
-      modalCaption.textContent = `${item.pageTitle || 'Screenshot'} (${formatTimestamp(item.timestamp)})`;
-      modal.style.display = 'block';
+      const imageUrl = URL.createObjectURL(blob);
+      chrome.tabs.create({ url: imageUrl }, (newTab) => {
+        // The object URL should be revoked when it's no longer needed.
+        // However, revoking it immediately might cause issues if the new tab hasn't loaded it yet.
+        // A common strategy is to revoke it after a short delay, or rely on the user closing the tab.
+        // For simplicity here, we'll let the browser manage it, though for long-lived blobs this could be an issue.
+        // If the new tab is closed, the blob URL might be auto-revoked by some browsers, but not guaranteed.
+        // A more robust solution might involve a listener for when the tab is closed, or using a different URL scheme if possible.
+        console.log(`Opened image for screenshot ${item.id} in new tab ${newTab.id}. URL: ${imageUrl}`);
+        // Optionally, to be safer, revoke after a delay, though this is not perfect:
+        // setTimeout(() => { URL.revokeObjectURL(imageUrl); console.log(`Revoked URL for tab ${newTab.id}`), 60000});
+      });
     } catch (e) {
-      console.error("Could not load full image:", e);
-      alert("Could not load full image.");
+      console.error("Could not load full image for new tab:", e);
+      alert("Could not load full image into a new tab.");
     }
   });
 
@@ -178,7 +152,6 @@ function renderScreenshotItem(item) {
     if (confirm('Are you sure you want to delete this screenshot?')) {
       try {
         await deleteScreenshot(item.id);
-        displayScreenshots(); // Refresh list
       } catch (e) {
         console.error("Could not delete screenshot:", e);
         alert("Error deleting screenshot.");
@@ -196,18 +169,13 @@ function updateToggleButton(enabled) {
     toggleCaptureButton.title = 'Click to Stop Screenshot Capture';
     toggleCaptureButton.classList.remove('paused');
     toggleCaptureButton.classList.add('active');
-    if (createTutorialButton) createTutorialButton.style.display = 'none'; // Hide when capturing
+    // if (createTutorialButton) createTutorialButton.style.display = 'none'; // Hide when capturing -> This will be handled by updatePopupState
   } else {
     toggleCaptureButton.textContent = 'Start Capturing';
     toggleCaptureButton.title = 'Click to Start Screenshot Capture';
-    toggleCaptureButton.classList.remove('active');
     toggleCaptureButton.classList.add('paused');
-    // Basic visibility: show if not capturing. Refine later with screenshot count.
-    if (createTutorialButton) {
-        // For now, just show it if not capturing. Later, add check for unassigned screenshots > 0
-        console.log("[Popup] Capturing is OFF. Displaying 'Create Tutorial' button (pending step count check).");
-        createTutorialButton.style.display = 'inline-block'; 
-    }
+    toggleCaptureButton.classList.remove('active');
+    // Visibility of createTutorialButton will be handled by updatePopupState
   }
 }
 
@@ -223,12 +191,16 @@ toggleCaptureButton.addEventListener('click', () => {
     const newStatus = !currentStatus;
     console.log(`[Popup] Changing captureEnabled from ${currentStatus} to ${newStatus}`);
     
-    chrome.storage.local.set({ captureEnabled: newStatus }, () => {
+    chrome.storage.local.set({ captureEnabled: newStatus }, async () => {
       if (chrome.runtime.lastError) {
         console.error('[Popup] Error setting captureEnabled:', chrome.runtime.lastError.message);
         return;
       }
-      updateToggleButton(newStatus);
+      if (newStatus) { // If capture is being started
+        await chrome.storage.local.set({ stepCounter: 0 }); 
+        console.log('[Popup] Capture explicitly started, stepCounter reset to 0.');
+      }
+      await updatePopupState();
       console.log(`[Popup] Capture ${newStatus ? 'started' : 'stopped'}. Notifying content scripts.`);
       
       // Notify active tab's content script to refresh its settings
@@ -260,28 +232,35 @@ openOptionsButton.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
-// Modal close functionality
-closeModalButton.onclick = function() {
-  modal.style.display = "none";
-  URL.revokeObjectURL(modalImage.src); // Clean up blob URL
-}
-window.onclick = function(event) {
-  if (event.target == modal) {
-    modal.style.display = "none";
-    URL.revokeObjectURL(modalImage.src); // Clean up blob URL
-  }
-}
+// Modal close functionality (can be removed or kept if modal is used for other things later)
+// Ensure these elements exist or guard these calls if removing modal HTML
+if (closeModalButton && modal && modalImage) { 
+    closeModalButton.onclick = function() {
+      modal.style.display = "none";
+      if (modalImage.src && modalImage.src.startsWith('blob:')) {
+        URL.revokeObjectURL(modalImage.src); 
+        modalImage.src = ""; 
+      }
+    }
+} 
+// if (modal) { // If modal object exists
+//     window.onclick = function(event) {
+//         if (event.target == modal) {
+//             modal.style.display = "none";
+//             if (modalImage.src && modalImage.src.startsWith('blob:')) {
+//                 URL.revokeObjectURL(modalImage.src); 
+//                 modalImage.src = "";
+//             }
+//         }
+//     }
+// }
 
-async function displayStorageInfo() {
+async function displayStorageInfo(quotaMB) {
     try {
-        const { storageQuotaMB } = await chrome.storage.local.get('storageQuotaMB');
-        const quotaToShow = storageQuotaMB || 100; // Default if not set
-        storageQuotaSpan.textContent = `${quotaToShow} MB`;
-
-        const idbHelper = await import('../js/idb-helper.js');
         const totalBytesUsed = await idbHelper.getTotalStorageUsed();
         const totalMbUsed = (totalBytesUsed / (1024 * 1024)).toFixed(2);
         storageUsedSpan.textContent = `${totalMbUsed} MB`;
+        storageQuotaSpan.textContent = `${quotaMB} MB`;
 
     } catch (error) {
         console.error("Error displaying storage info:", error);
@@ -290,7 +269,41 @@ async function displayStorageInfo() {
     }
 }
 
-// Initial load
+// --- Manage Capture State & Update UI ---
+async function updatePopupState() {
+  console.log('[Popup] Updating popup state...');
+  try {
+    const data = await chrome.storage.local.get(['captureEnabled', 'storageQuotaMB']);
+    const captureEnabled = data.captureEnabled || false;
+    const quotaMB = data.storageQuotaMB || 100; // Default or from settings
+
+    console.log('[Popup] Current captureEnabled state:', captureEnabled);
+    updateToggleButton(captureEnabled);
+
+    const unassignedScreenshots = await idbHelper.getUnassignedScreenshots();
+    const hasUnassigned = unassignedScreenshots && unassignedScreenshots.length > 0;
+    console.log('[Popup] Has unassigned screenshots:', hasUnassigned, '(Count:', unassignedScreenshots.length, ')');
+
+    if (createTutorialButton) {
+      if (!captureEnabled && hasUnassigned) {
+        createTutorialButton.style.display = 'block';
+        console.log('[Popup] Create Tutorial button VISIBLE.');
+      } else {
+        createTutorialButton.style.display = 'none';
+        console.log('[Popup] Create Tutorial button HIDDEN. (captureEnabled:', captureEnabled, ', hasUnassigned:', hasUnassigned, ')');
+      }
+    }
+
+    await displayStorageInfo(quotaMB);
+    await displayScreenshots(); // Refresh screenshot list (it filters assigned ones)
+
+  } catch (error) {
+    console.error('[Popup] Error updating popup state:', error);
+    // Optionally display an error message in the popup itself
+  }
+}
+
+// --- Initialize Popup ---
 async function initPopup() {
   // Load initial toggle button state
   chrome.storage.local.get('captureEnabled', (data) => {
@@ -303,12 +316,13 @@ async function initPopup() {
   });
 
   // Listen for storage changes to update button dynamically
-  chrome.storage.onChanged.addListener((changes, namespace) => {
+  chrome.storage.onChanged.addListener(async (changes, namespace) => {
     if (namespace === 'local' && changes.captureEnabled !== undefined) {
-      updateToggleButton(changes.captureEnabled.newValue);
+      console.log("[Popup] chrome.storage.onChanged detected captureEnabled change. Calling updatePopupState.");
+      await updatePopupState();
     }
     if (namespace === 'local' && (changes.storageQuotaMB || changes.retentionDays)) {
-        displayStorageInfo();
+        await displayStorageInfo();
     }
   });
 
@@ -319,13 +333,20 @@ async function initPopup() {
 document.addEventListener('DOMContentLoaded', initPopup);
 
 // Listen for STORAGE_UPDATED message from service worker
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'STORAGE_UPDATED') {
-    console.log('[Popup] Received STORAGE_UPDATED, refreshing screenshots and storage info.');
-    displayScreenshots();
-    displayStorageInfo();
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  console.log("popup.js: Message received", message);
+  if (message.type === 'SCREENSHOT_TAKEN' || message.type === "STORAGE_UPDATED") {
+    console.log("popup.js: SCREENSHOT_TAKEN or STORAGE_UPDATED received, refreshing UI.");
+    await displayScreenshots();
+    await displayStorageInfo();
+    await updatePopupState(); // Refresh button states including Create Tutorial button
+  } else if (message.type === 'CAPTURE_STATE_CHANGED') {
+      console.log("popup.js: CAPTURE_STATE_CHANGED received", message.captureEnabled);
+      await updatePopupState(); // Update all relevant UI based on new capture state
   }
-  // Return false or true based on whether you intend to send an async response from this listener
+  // Indicate that we are not sending an asynchronous response from this listener, 
+  // unless specifically needed for a message type.
+  // For these messages, we are just reacting.
   return false; 
 });
 
@@ -346,13 +367,96 @@ if (diagnoseButton) {
 }
 */
 
-// Add event listener for createTutorialButton - for now, just a log and alert
+// Event listener for Create Tutorial button
 if (createTutorialButton) {
-  createTutorialButton.addEventListener('click', () => {
-    console.log('[Popup] Create Tutorial button clicked.');
-    alert('Create Tutorial functionality coming in Phase 2! This will gather unassigned screenshots.');
-    // Placeholder: In Phase 2, this will prompt for title and then redirect:
-    // chrome.tabs.create({ url: 'html/tutorials.html' }); 
+  createTutorialButton.addEventListener('click', async () => {
+    const tutorialTitle = prompt("Enter a title for the new tutorial:");
+    if (!tutorialTitle || tutorialTitle.trim() === "") {
+      alert("Tutorial title cannot be empty.");
+      return;
+    }
+
+    try {
+      await idbHelper.initDB(); // Ensure DB is ready
+      const unassignedScreenshots = await idbHelper.getUnassignedScreenshots();
+      if (!unassignedScreenshots || unassignedScreenshots.length === 0) {
+        alert("No unassigned screenshots to add to a tutorial.");
+        await updatePopupState(); // Re-check and hide button if needed
+        return;
+      }
+
+      const newTutorialId = await idbHelper.addTutorial({
+        title: tutorialTitle.trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        description: "", 
+        coverImageId: null 
+      });
+      console.log("popup.js: Tutorial created with ID:", newTutorialId);
+
+      // Create a default header for the new tutorial
+      const defaultHeaderTitle = "Initial Content"; // You can make this dynamic or configurable if needed
+      const nextHeaderOrder = await idbHelper.getNextHeaderOrder(newTutorialId);
+      const newHeaderId = await idbHelper.addHeader({
+          tutorialId: newTutorialId,
+          title: defaultHeaderTitle,
+          description: "", // Empty description for default header
+          order: nextHeaderOrder 
+      });
+      console.log(`popup.js: Default header '${defaultHeaderTitle}' created with ID ${newHeaderId} for tutorial ${newTutorialId}`);
+
+      let firstScreenshotIdForCover = null;
+      for (let i = 0; i < unassignedScreenshots.length; i++) {
+        const screenshot = unassignedScreenshots[i];
+        
+        let stepTitle = 'Untitled Step'; 
+        if (screenshot.targetElementInfo && screenshot.targetElementInfo.text && screenshot.targetElementInfo.text.trim() !== "") {
+          stepTitle = `Click on <strong>${screenshot.targetElementInfo.text.trim()}</strong>`;
+        } else if (screenshot.pageTitle) { 
+          stepTitle = screenshot.pageTitle; 
+        }
+
+        await idbHelper.assignScreenshotToTutorial(screenshot.id, newTutorialId); // Assigns to tutorial, not header. Still relevant.
+        
+        // Get next step order for the new header
+        const nextStepOrderInHeader = await idbHelper.getNextStepOrder(newHeaderId);
+
+        await idbHelper.addTutorialStep({
+          headerId: newHeaderId, // Assign step to the new default header
+          screenshotId: screenshot.id,
+          order: nextStepOrderInHeader, // Order within the header
+          notes: "", 
+          title: stepTitle 
+        });
+        if (i === 0 && screenshot.id) { 
+          firstScreenshotIdForCover = screenshot.id;
+        }
+        console.log(`popup.js: Assigned screenshot ${screenshot.id} to header ${newHeaderId} (tutorial ${newTutorialId}) and created step with order ${nextStepOrderInHeader}.`);
+      }
+
+      if (firstScreenshotIdForCover) {
+        await idbHelper.updateTutorial(newTutorialId, { coverImageId: firstScreenshotIdForCover, updatedAt: new Date().toISOString() });
+        console.log(`popup.js: Set screenshot ${firstScreenshotIdForCover} as cover for tutorial ${newTutorialId}`);
+      }
+
+      alert(`Tutorial "${tutorialTitle}" created successfully with a default header and ${unassignedScreenshots.length} steps!`);
+      
+      await updatePopupState();
+      await displayScreenshots(); 
+      await displayStorageInfo();
+
+      chrome.tabs.create({ url: chrome.runtime.getURL('html/tutorials.html') });
+
+    } catch (error) {
+      console.error("popup.js: Error creating tutorial:", error);
+      alert("Failed to create tutorial. Check console for details: " + error.message);
+    }
+  });
+}
+
+if (homeButton) {
+  homeButton.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('html/tutorials.html') });
   });
 }
 

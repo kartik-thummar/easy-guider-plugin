@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Tutorial</title>
+    <!-- Include Quill library -->
+    <link rel="stylesheet" href="../vendor/quill/quill.snow.css">
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/edit-tutorial.css">
+    <!-- TUI Image Editor CSS -->
+    <link rel="stylesheet" href="../vendor/tui-image-editor/tui-color-picker.css">
+    <link rel="stylesheet" href="../vendor/tui-image-editor/tui-image-editor.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Edit Tutorial: <span id="tutorialNameDisplay">Loading...</span></h1>
+            <div class="breadcrumb">
+                <a href="popup.html">Home</a> &gt; <a href="tutorials.html">Tutorials</a> &gt; Edit
+            </div>
+        </header>
+
+        <main>
+            <div class="tutorial-meta-editor">
+                <div class="form-group">
+                    <label for="tutorialTitleInput">Tutorial Title:</label>
+                    <input type="text" id="tutorialTitleInput" placeholder="Enter tutorial title">
+                </div>
+                <div class="form-group">
+                    <label for="tutorialDescriptionInput">Tutorial Description (optional):</label>
+                    <textarea id="tutorialDescriptionInput" placeholder="Enter a brief description of the tutorial"></textarea>
+                </div>
+            </div>
+
+            <h2>Headers</h2>
+            <div id="tutorialHeadersContainer">
+                <p class="loading-message">Loading tutorial content...</p>
+                <!-- Headers and their steps will be dynamically loaded here -->
+            </div>
+            <div class="tutorial-header-actions">
+                <button id="addNewHeader" class="button primary-button">+ Add New Header</button>
+            </div>
+
+            <div class="tutorial-actions">
+                <button id="cancelEditTutorial" class="button">Cancel</button>
+                <div class="right-actions">
+                    <button id="saveTutorialChanges" class="button primary-button">Save Changes</button>
+                    <button id="deleteFullTutorial" class="button danger-button">Delete Tutorial</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Image Editor Modal -->
+    <div id="imageEditorModal" class="image-editor-modal">
+        <div class="image-editor-modal-content">
+            <span class="image-editor-close-btn">&times;</span>
+            <div id="tui-image-editor-container"></div>
+            <div class="image-editor-controls">
+                <button id="imageEditorSaveButton" class="button primary-button">Save Image</button>
+                <button id="imageEditorCancelButton" class="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+  <!-- Include Quill library -->
+  <script src="../vendor/quill/quill.js"></script>
+  <!-- TUI Image Editor Dependencies (Local) -->
+  <script src="../vendor/tui-image-editor/fabric.min.js"></script>
+  <script src="../vendor/tui-image-editor/tui-code-snippet.min.js"></script>
+  <script src="../vendor/tui-image-editor/tui-color-picker.js"></script>
+  <!-- TUI Image Editor JS -->
+  <script src="../vendor/tui-image-editor/tui-image-editor.min.js"></script>
+  <script type="module" src="../js/idb-helper.js"></script>
+  <script type="module" src="../js/edit-tutorial.js"></script>
+</body>
+</html> 
